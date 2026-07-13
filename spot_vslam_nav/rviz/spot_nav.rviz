@@ -17,6 +17,27 @@ Visualization Manager:
       Name: TF
       Enabled: true
       Show Names: false
+    - Class: rviz_default_plugins/RobotModel
+      Name: RobotModel
+      Enabled: true
+      # Upstream's own robot_state_publisher is fed raw SDF (spot.gazebo.launch.py
+      # reads model.sdf directly into the "robot_description" parameter, not a
+      # URDF) so it can drive TF correctly, but SDF's <pose> composition rules
+      # differ from URDF's <origin> rules -- RViz's RobotModel display parses
+      # URDF only, and pointing it at that SDF topic silently misinterprets the
+      # per-link poses, producing a mesh that is rigidly offset from the real
+      # TF-correct robot (this is what previously looked like "the robot is
+      # ~1m below the map": there was no correct mesh here, only whatever a
+      # manually-added display parsing the wrong source produced). Use the
+      # genuine URDF (same links/joints, already includes the injected D435i)
+      # that ships alongside it instead -- File mode needs no extra node and
+      # its meshes resolve via package://spot_description exactly as installed
+      # in this same image.
+      Description Source: File
+      Description File: /ws/install/spot_description/share/spot_description/models/spot/model.urdf
+      Visual Enabled: true
+      Collision Enabled: false
+      Alpha: 1
     - Class: rviz_default_plugins/Odometry
       Name: VSLAM Odometry
       Topic:

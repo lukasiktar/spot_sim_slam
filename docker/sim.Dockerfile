@@ -47,6 +47,15 @@ RUN git clone --depth 1 https://github.com/g1y5x3/spot_gazebo_ros2.git spot_gaze
 RUN sed -i 's#<odom_frame>/odom_spot</odom_frame>#<odom_frame>odom</odom_frame>#' \
       /ws/src/spot_gazebo_ros2/spot_description/models/spot/model.sdf
 
+# model.urdf's mesh filenames are missing a "models/spot/" path segment
+# (package://spot_description/meshes/... instead of the real installed
+# location package://spot_description/models/spot/meshes/...) -- model.sdf
+# uses the correct path, so Gazebo has always rendered fine, but nothing
+# upstream actually consumes model.urdf, so this typo was never caught.
+# RViz's RobotModel display uses this file directly and needs it fixed.
+RUN sed -i 's#package://spot_description/meshes/#package://spot_description/models/spot/meshes/#g' \
+      /ws/src/spot_gazebo_ros2/spot_description/models/spot/model.urdf
+
 # ---- Copy in our packages ---------------------------------------------------
 # spot_vslam_nav: the SAME package that deploys to the Jetson (nav2 configs,
 #                 cmd_vel gate, health monitor, goal CLI).

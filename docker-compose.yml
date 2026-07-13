@@ -80,6 +80,12 @@ services:
             - driver: nvidia
               count: 1
               capabilities: [gpu]
+    # Host-persistent: cuVSLAM's save_map/load_map services write/read a map
+    # database by folder path inside the container, and the container
+    # filesystem is gone on `docker compose down` -- without this bind mount
+    # every saved map would vanish the moment the container is removed.
+    volumes:
+      - ./maps:/maps
     command: >
       bash -lc "source /opt/ros/humble/setup.bash &&
                 ros2 launch /launch/vslam_sim.launch.py"

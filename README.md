@@ -61,6 +61,9 @@ gate, and all integration logic are still fully testable. Just remember it's a
 stand-in — final SLAM-quality validation happens with cuVSLAM (GPU container
 or the Jetson itself).
 
+See [USAGE.md](USAGE.md) for a step-by-step operating guide, including how to
+record a cuVSLAM map and reuse it in a later session.
+
 ## Quick start
 
 ```bash
@@ -128,8 +131,12 @@ parameterized in `spot_vslam_nav`'s launch files.
 * Sim time: everything runs with `use_sim_time:=true`; the `/clock` bridge is
   in `sim/config/gz_bridge.yaml`. If TF complains about extrapolation, verify
   `/clock` is actually publishing.
-* Gazebo depth → `/camera/depth/color/points` feeds the same
-  `pointcloud_to_laserscan` → costmap pipeline as the real robot.
+* Gazebo's own depth camera point-cloud output is bugged in this version (every
+  point comes out with x >= 0 regardless of source pixel); `sim.launch.py` runs
+  a small `depth_to_points` node instead, generating `/camera/depth/color/points`
+  from the depth image + camera_info directly. Nav2's costmaps consume that
+  point cloud straight (`depth_cloud` observation source) rather than going
+  through `pointcloud_to_laserscan` — its `/scan` never reliably delivered data.
 
 ## Layout
 
