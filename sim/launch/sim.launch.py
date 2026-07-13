@@ -84,11 +84,34 @@ def generate_launch_description():
         output="screen",
     )
 
+    # Gazebo's own depth_camera point-cloud generation has a bug in this
+    # version: every point comes out with x >= 0 regardless of which image
+    # column it came from, even though the depth image and its camera_info
+    # are both correctly centered/symmetric. Generate the point cloud
+    # ourselves from those (verified-good) inputs instead of trusting
+    # Gazebo's "/camera/depth/points" -> we never bridge that topic at all
+    # (see gz_bridge.yaml).
+    #
+    # depth_image_proc's point_cloud_xyz_node was tried first, but its
+    # image/camera_info synchronizer needs matching timestamps and our
+    # image and camera_info come from independent Gazebo publish schedules
+    # with a consistent ~60-70ms gap -- they never sync. Our own node just
+    # caches the (static) intrinsics and applies them to each depth frame
+    # directly, no message-level sync needed.
+    depth_to_points = Node(
+        package="spot_sim_slam",
+        executable="depth_to_points",
+        name="depth_to_points",
+        parameters=[{"use_sim_time": True}],
+        output="screen",
+    )
+
     return LaunchDescription(
         [
             DeclareLaunchArgument("headless", default_value="false"),
             upstream,
             bridge,
             unpause_world,
+            depth_to_points,
         ]
     )

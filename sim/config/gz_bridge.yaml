@@ -45,11 +45,20 @@
   gz_type_name: "gz.msgs.Image"
   direction: GZ_TO_ROS
 
-- ros_topic_name: "/camera/depth/color/points"
-  gz_topic_name: "/camera/depth/points"
-  ros_type_name: "sensor_msgs/msg/PointCloud2"
-  gz_type_name: "gz.msgs.PointCloudPacked"
+- ros_topic_name: "/camera/depth/camera_info"
+  gz_topic_name: "/camera/camera_info"
+  ros_type_name: "sensor_msgs/msg/CameraInfo"
+  gz_type_name: "gz.msgs.CameraInfo"
   direction: GZ_TO_ROS
+
+# NOTE: /camera/depth/color/points is intentionally NOT bridged from Gazebo's
+# own "/camera/depth/points" here. Its camera_info is correctly centered
+# (verified: cx=320, cy=180 for a 640x360 image), but every point it
+# generates comes out with x >= 0 regardless of which image column it came
+# from — a bug in this Gazebo version's depth_camera point-cloud generation,
+# not a config issue. sim.launch.py instead runs our own depth_to_points
+# node on the (correctly oriented and symmetric) depth image + camera_info
+# bridged above, publishing the real point cloud there.
 
 - ros_topic_name: "/camera/color/image_raw"
   gz_topic_name: "/camera/color/image_raw"
