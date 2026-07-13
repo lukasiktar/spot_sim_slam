@@ -51,6 +51,18 @@
   gz_type_name: "gz.msgs.PointCloudPacked"
   direction: GZ_TO_ROS
 
+- ros_topic_name: "/camera/color/image_raw"
+  gz_topic_name: "/camera/color/image_raw"
+  ros_type_name: "sensor_msgs/msg/Image"
+  gz_type_name: "gz.msgs.Image"
+  direction: GZ_TO_ROS
+
+- ros_topic_name: "/camera/color/camera_info"
+  gz_topic_name: "/camera/color/camera_info"
+  ros_type_name: "sensor_msgs/msg/CameraInfo"
+  gz_type_name: "gz.msgs.CameraInfo"
+  direction: GZ_TO_ROS
+
 # OdometryPublisher's odom->base_link pose (spot_description/model.sdf) is
 # only published as Pose_V on the model's default tf_topic — nothing else
 # bridges it into ROS's /tf, which Nav2's costmaps require.

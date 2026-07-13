@@ -8,18 +8,29 @@
   camera+IMU <sensor> elements have to live here to ever produce data.
 
   Frame hierarchy mirrors d435i_sim.urdf.xacro exactly (fixed joints, all
-  poses given absolute/relative-to-model like the rest of model.sdf):
+  poses given absolute/relative-to-model like the rest of model.sdf). Every
+  sensor sits on a level, non-rotated physical "_frame" link; the -90/-90
+  optical-convention rotation only ever applies to a separate, sensor-less
+  "_optical_frame" child used purely for TF/gz_frame_id labeling. Attaching
+  a sensor directly to an already-rotated "_optical_frame" link (as an
+  earlier version of this file did for depth) physically points it ~90
+  degrees away from the others: it isn't a wrong-topic bug, the sensor
+  really is aimed somewhere else.
     base_link
       -> camera_link                    (0.30 0 0.12, mount point)
            -> camera_infra1_frame       (physical; carries the infra1 sensor)
-                -> camera_infra1_optical_frame   (REP103 -> optical rotation)
+                -> camera_infra1_optical_frame
            -> camera_infra2_frame       (50mm baseline; carries infra2 sensor)
                 -> camera_infra2_optical_frame
-           -> camera_depth_optical_frame        (carries the depth sensor;
-                                                   co-located with infra1)
-           -> camera_imu_optical_frame          (carries the IMU; no optical
-                                                   rotation, matches D435i's
-                                                   own IMU axis convention)
+           -> camera_depth_frame        (carries the depth sensor;
+                                          co-located with infra1)
+                -> camera_depth_optical_frame
+           -> camera_color_frame        (carries the RGB sensor;
+                                          co-located with depth)
+                -> camera_color_optical_frame
+           -> camera_imu_optical_frame  (carries the IMU directly, no
+                                          optical rotation, matches D435i's
+                                          own IMU axis convention)
 
   Topics/gz_frame_id match gz_bridge.yaml exactly (camera/infra1/..., etc.)
   so no bridge config changes are needed once this is actually loaded.
@@ -155,8 +166,18 @@
   <physics><ode><limit><cfm>0</cfm><erp>0.2</erp></limit></ode></physics>
 </joint>
 
-<link name="camera_depth_optical_frame">
-  <pose>0.30 0 0.12 -1.570796 0 -1.570796</pose>
+<!-- BUG FIX: the depth sensor used to be attached directly to
+     camera_depth_optical_frame, which already carries the -90/-90 optical
+     axis-convention rotation. That physically pointed the depth camera
+     ~90 degrees off from infra1/infra2 (which correctly sit on a level,
+     non-rotated physical frame): the sensor was never reading from a
+     different camera, it was just aimed somewhere else entirely, which is
+     also why obstacle mapping only ever filled in on one side (the point
+     cloud came from that misaimed sensor). Mirror infra1/infra2's pattern:
+     sensor on a level physical frame, rotation only on a separate,
+     sensor-less optical child used purely for TF/frame_id labeling. -->
+<link name="camera_depth_frame">
+  <pose>0.30 0 0.12 0 0 0</pose>
   <inertial>
     <mass>1e-05</mass>
     <inertia>
@@ -177,9 +198,30 @@
     </camera>
   </sensor>
 </link>
+<joint name="camera_depth_frame_j" type="fixed">
+  <child>camera_depth_frame</child>
+  <parent>camera_link</parent>
+  <axis>
+    <dynamics><spring_reference>0</spring_reference><spring_stiffness>0</spring_stiffness></dynamics>
+    <xyz>0 0 1</xyz>
+    <limit><lower>-1e+16</lower><upper>1e+16</upper></limit>
+  </axis>
+  <physics><ode><limit><cfm>0</cfm><erp>0.2</erp></limit></ode></physics>
+</joint>
+
+<link name="camera_depth_optical_frame">
+  <pose>0.30 0 0.12 -1.570796 0 -1.570796</pose>
+  <inertial>
+    <mass>1e-05</mass>
+    <inertia>
+      <ixx>0.001</ixx><ixy>1e-06</ixy><ixz>1e-06</ixz>
+      <iyy>0.001</iyy><iyz>1e-06</iyz><izz>0.001</izz>
+    </inertia>
+  </inertial>
+</link>
 <joint name="camera_depth_optical_frame_j" type="fixed">
   <child>camera_depth_optical_frame</child>
-  <parent>camera_link</parent>
+  <parent>camera_depth_frame</parent>
   <axis>
     <dynamics><spring_reference>0</spring_reference><spring_stiffness>0</spring_stiffness></dynamics>
     <xyz>0 0 1</xyz>
@@ -219,6 +261,65 @@
 <joint name="camera_imu_optical_frame_j" type="fixed">
   <child>camera_imu_optical_frame</child>
   <parent>camera_link</parent>
+  <axis>
+    <dynamics><spring_reference>0</spring_reference><spring_stiffness>0</spring_stiffness></dynamics>
+    <xyz>0 0 1</xyz>
+    <limit><lower>-1e+16</lower><upper>1e+16</upper></limit>
+  </axis>
+  <physics><ode><limit><cfm>0</cfm><erp>0.2</erp></limit></ode></physics>
+</joint>
+
+<!-- RGB color sensor, matching the real D435i's color stream. Same pattern
+     as infra1/infra2: sensor sits on a level physical frame, the -90/-90
+     optical-convention rotation only applies to a separate, sensor-less
+     child frame used for TF/frame_id labeling. -->
+<link name="camera_color_frame">
+  <pose>0.30 0 0.12 0 0 0</pose>
+  <inertial>
+    <mass>1e-05</mass>
+    <inertia>
+      <ixx>0.001</ixx><ixy>1e-06</ixy><ixz>1e-06</ixz>
+      <iyy>0.001</iyy><iyz>1e-06</iyz><izz>0.001</izz>
+    </inertia>
+  </inertial>
+  <sensor name="color" type="camera">
+    <always_on>1</always_on>
+    <update_rate>15</update_rate>
+    <visualize>true</visualize>
+    <topic>camera/color/image_raw</topic>
+    <gz_frame_id>camera_color_optical_frame</gz_frame_id>
+    <camera>
+      <horizontal_fov>1.211</horizontal_fov>
+      <image><width>640</width><height>480</height><format>R8G8B8</format></image>
+      <clip><near>0.1</near><far>50</far></clip>
+      <noise><type>gaussian</type><mean>0</mean><stddev>0.005</stddev></noise>
+    </camera>
+  </sensor>
+</link>
+<joint name="camera_color_frame_j" type="fixed">
+  <child>camera_color_frame</child>
+  <parent>camera_link</parent>
+  <axis>
+    <dynamics><spring_reference>0</spring_reference><spring_stiffness>0</spring_stiffness></dynamics>
+    <xyz>0 0 1</xyz>
+    <limit><lower>-1e+16</lower><upper>1e+16</upper></limit>
+  </axis>
+  <physics><ode><limit><cfm>0</cfm><erp>0.2</erp></limit></ode></physics>
+</joint>
+
+<link name="camera_color_optical_frame">
+  <pose>0.30 0 0.12 -1.570796 0 -1.570796</pose>
+  <inertial>
+    <mass>1e-05</mass>
+    <inertia>
+      <ixx>0.001</ixx><ixy>1e-06</ixy><ixz>1e-06</ixz>
+      <iyy>0.001</iyy><iyz>1e-06</iyz><izz>0.001</izz>
+    </inertia>
+  </inertial>
+</link>
+<joint name="camera_color_optical_frame_j" type="fixed">
+  <child>camera_color_optical_frame</child>
+  <parent>camera_color_frame</parent>
   <axis>
     <dynamics><spring_reference>0</spring_reference><spring_stiffness>0</spring_stiffness></dynamics>
     <xyz>0 0 1</xyz>
