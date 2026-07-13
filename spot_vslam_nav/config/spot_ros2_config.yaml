@@ -1,0 +1,36 @@
+# Example spot_ros2 driver configuration.
+# Copy, fill in credentials, and pass via spot_config:=... at launch.
+# Full reference: spot_driver/config/spot_ros_example.yaml in the
+# rai-opensource/spot_ros2 repository.
+/**:
+  ros__parameters:
+    # --- Connection ---
+    # Jetson on the payload rail talks to Spot over the payload Ethernet port:
+    # Spot's payload-side IP is 192.168.50.3 by default.
+    hostname: "192.168.50.3"
+    username: "user"
+    password: "CHANGE_ME"
+
+    # --- Behavior ---
+    auto_claim: false      # spot_auto_bringup handles claim/power/stand
+    auto_power_on: false
+    auto_stand: false
+
+    # Kinematic odometry: "odom" (pure kinematics) or "vision" (Spot's own
+    # visual odometry). Use "odom" — cuVSLAM provides the visual correction.
+    preferred_odom_frame: "odom"
+
+    # --- Rates ---
+    metrics_rate: 0.04
+    lease_rate: 1.0
+    front_image_rate: 0.0     # body cameras off; RealSense is the SLAM sensor
+    side_image_rate: 0.0
+    rear_image_rate: 0.0
+    point_cloud_rate: 0.0
+
+    # Estop configuration
+    estop_timeout: 9.0
+    start_estop: false
+
+    # cmd_vel behavior
+    cmd_duration: 0.25        # each Twist commands 250 ms of motion (watchdog)

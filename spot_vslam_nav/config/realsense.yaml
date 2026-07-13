@@ -1,0 +1,36 @@
+# RealSense D435i / D455 configuration for cuVSLAM + Nav2 costmaps on Spot.
+/**:
+  ros__parameters:
+    camera_name: camera
+
+    # ---- Stereo IR pair for cuVSLAM ----
+    enable_infra1: true
+    enable_infra2: true
+    infra_width: 640
+    infra_height: 360        # 640x360@60 keeps the Orin Nano comfortable
+    infra_fps: 60.0
+
+    # CRITICAL: the IR emitter projects a dot pattern that breaks feature
+    # tracking. Keep it OFF for the VSLAM stereo pair.
+    depth_module.emitter_enabled: 0
+
+    # ---- Depth for obstacle avoidance (Nav2 costmaps) ----
+    enable_depth: true
+    depth_width: 640
+    depth_height: 360
+    depth_fps: 15.0
+    pointcloud.enable: true
+    align_depth.enable: false
+
+    # ---- Color off (saves USB bandwidth + CPU on the Orin Nano) ----
+    enable_color: false
+
+    # ---- IMU (D435i / D455) ----
+    enable_gyro: true
+    enable_accel: true
+    gyro_fps: 200.0
+    accel_fps: 200.0
+    unite_imu_method: 2        # 2 = linear_interpolation (required by cuVSLAM)
+
+    # Global timestamps so images/IMU share a clock
+    enable_sync: true

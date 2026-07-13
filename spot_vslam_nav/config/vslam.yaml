@@ -1,0 +1,40 @@
+# Isaac ROS Visual SLAM (cuVSLAM) parameters — tuned for a legged robot.
+# Applies to isaac_ros_visual_slam >= 3.0 (JetPack 6 / ROS 2 Humble).
+/**:
+  ros__parameters:
+    num_cameras: 2
+
+    # RealSense infra images arrive already rectified.
+    rectified_images: true
+
+    # IMU fusion helps a LOT on a walking robot (gait-induced vibration,
+    # aggressive pitch/roll). Requires unite_imu_method=linear_interpolation
+    # on the RealSense side.
+    enable_imu_fusion: true
+    gyro_noise_density: 0.000244
+    gyro_random_walk: 0.000019393
+    accel_noise_density: 0.001862
+    accel_random_walk: 0.003
+    calibration_frequency: 200.0
+    img_jitter_threshold_ms: 34.0
+
+    # SLAM (loop closure + pose-graph) on, localization drift correction
+    # is published as map->odom.
+    enable_localization_n_mapping: true
+    enable_slam_visualization: true
+    enable_observations_view: true
+    enable_landmarks_view: true
+
+    # Legged robots shake; be tolerant before declaring tracking lost.
+    enable_ground_constraint_in_odometry: false
+    enable_ground_constraint_in_slam: false
+    enable_imu_integrator: false
+
+    # Denoising helps with motion blur from gait impacts.
+    enable_image_denoising: true
+
+    # QoS to match RealSense defaults
+    image_qos: "SENSOR_DATA"
+
+    # How often to publish diagnostics/status
+    verbosity: 1

@@ -1,0 +1,61 @@
+# ros_gz_bridge topic map: Gazebo Sim <-> ROS 2
+# Loaded by sim.launch.py via `ros_gz_bridge parameter_bridge --ros-args -p config_file:=...`
+# Topic names deliberately match the real RealSense driver so the identical
+# VSLAM config runs against sim and hardware.
+#
+# NOTE: /clock is intentionally NOT bridged here — the upstream spot_bringup
+# bridge (spot_bridge.yaml) already bridges it. A second independent bridge
+# publishing the same /clock topic causes non-monotonic timestamp delivery
+# (two processes racing to publish), which tf2 sees as the clock repeatedly
+# "jumping back in time" and constantly clears its buffer as a result.
+
+- ros_topic_name: "/camera/infra1/image_rect_raw"
+  gz_topic_name: "/camera/infra1/image_rect_raw"
+  ros_type_name: "sensor_msgs/msg/Image"
+  gz_type_name: "gz.msgs.Image"
+  direction: GZ_TO_ROS
+
+- ros_topic_name: "/camera/infra1/camera_info"
+  gz_topic_name: "/camera/infra1/camera_info"
+  ros_type_name: "sensor_msgs/msg/CameraInfo"
+  gz_type_name: "gz.msgs.CameraInfo"
+  direction: GZ_TO_ROS
+
+- ros_topic_name: "/camera/infra2/image_rect_raw"
+  gz_topic_name: "/camera/infra2/image_rect_raw"
+  ros_type_name: "sensor_msgs/msg/Image"
+  gz_type_name: "gz.msgs.Image"
+  direction: GZ_TO_ROS
+
+- ros_topic_name: "/camera/infra2/camera_info"
+  gz_topic_name: "/camera/infra2/camera_info"
+  ros_type_name: "sensor_msgs/msg/CameraInfo"
+  gz_type_name: "gz.msgs.CameraInfo"
+  direction: GZ_TO_ROS
+
+- ros_topic_name: "/camera/imu"
+  gz_topic_name: "/camera/imu"
+  ros_type_name: "sensor_msgs/msg/Imu"
+  gz_type_name: "gz.msgs.IMU"
+  direction: GZ_TO_ROS
+
+- ros_topic_name: "/camera/depth/image_rect_raw"
+  gz_topic_name: "/camera/depth"
+  ros_type_name: "sensor_msgs/msg/Image"
+  gz_type_name: "gz.msgs.Image"
+  direction: GZ_TO_ROS
+
+- ros_topic_name: "/camera/depth/color/points"
+  gz_topic_name: "/camera/depth/points"
+  ros_type_name: "sensor_msgs/msg/PointCloud2"
+  gz_type_name: "gz.msgs.PointCloudPacked"
+  direction: GZ_TO_ROS
+
+# OdometryPublisher's odom->base_link pose (spot_description/model.sdf) is
+# only published as Pose_V on the model's default tf_topic — nothing else
+# bridges it into ROS's /tf, which Nav2's costmaps require.
+- ros_topic_name: "/tf"
+  gz_topic_name: "/model/spot/pose"
+  ros_type_name: "tf2_msgs/msg/TFMessage"
+  gz_type_name: "gz.msgs.Pose_V"
+  direction: GZ_TO_ROS

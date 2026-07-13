@@ -1,0 +1,53 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>spot_vslam_nav</name>
+  <version>1.0.0</version>
+  <description>
+    Isaac ROS Visual SLAM (cuVSLAM) + Nav2 autonomy stack for Boston Dynamics Spot,
+    running on an NVIDIA Jetson Orin Nano payload. Bridges the spot_ros2 driver
+    with GPU-accelerated visual SLAM and Nav2 navigation.
+  </description>
+  <maintainer email="user@example.com">Spot Autonomy</maintainer>
+  <license>MIT</license>
+
+  <!-- Core -->
+  <exec_depend>rclpy</exec_depend>
+  <exec_depend>launch</exec_depend>
+  <exec_depend>launch_ros</exec_depend>
+  <exec_depend>std_srvs</exec_depend>
+  <exec_depend>geometry_msgs</exec_depend>
+  <exec_depend>nav_msgs</exec_depend>
+  <exec_depend>sensor_msgs</exec_depend>
+  <exec_depend>tf2_ros</exec_depend>
+
+  <!-- Spot driver (built from source: https://github.com/rai-opensource/spot_ros2) -->
+  <exec_depend>spot_driver</exec_depend>
+  <exec_depend>spot_msgs</exec_depend>
+
+  <!-- Isaac ROS Visual SLAM (installed via NVIDIA apt repo or built from source) -->
+  <exec_depend>isaac_ros_visual_slam</exec_depend>
+
+  <!-- Nav2 -->
+  <exec_depend>nav2_bringup</exec_depend>
+  <exec_depend>nav2_lifecycle_manager</exec_depend>
+  <exec_depend>nav2_map_server</exec_depend>
+  <exec_depend>nav2_amcl</exec_depend>
+  <exec_depend>nav2_controller</exec_depend>
+  <exec_depend>nav2_planner</exec_depend>
+  <exec_depend>nav2_behaviors</exec_depend>
+  <exec_depend>nav2_bt_navigator</exec_depend>
+  <exec_depend>nav2_velocity_smoother</exec_depend>
+  <exec_depend>nav2_mppi_controller</exec_depend>
+
+  <!-- Sensors -->
+  <exec_depend>realsense2_camera</exec_depend>
+
+  <!-- Utils -->
+  <exec_depend>pointcloud_to_laserscan</exec_depend>
+  <exec_depend>topic_tools</exec_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>

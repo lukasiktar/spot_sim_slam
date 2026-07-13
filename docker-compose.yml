@@ -1,0 +1,128 @@
+# =============================================================================
+# Spot simulation + Visual SLAM + Nav2 — full stack in Docker
+#
+# Host requirements:
+#   - Docker + docker compose plugin
+#   - For the `vslam` service: NVIDIA GPU + driver + nvidia-container-toolkit
+#   - X11 for GUIs:  xhost +local:docker
+#
+# Everything runs ROS 2 HUMBLE inside containers to exactly match the
+# Jetson Orin Nano deployment (Isaac ROS 3.x / JetPack 6 = Humble).
+# Your host's ROS 2 Jazzy is untouched and not required.
+#
+# Usage:
+#   xhost +local:docker
+#   docker compose build                  # ~30-45 min first time
+#   docker compose up sim                 # Gazebo + Spot + D435i + teleop bridge
+#   docker compose up vslam               # cuVSLAM (NVIDIA GPU required)
+#   docker compose up nav                 # Nav2 + safety gate
+#   docker compose up rviz                # visualization
+#
+#   # everything at once:
+#   docker compose --profile gpu up
+#
+#   # no NVIDIA GPU? CPU fallback SLAM (RTAB-Map) with the same TF contract:
+#   docker compose --profile cpu up
+# =============================================================================
+
+x-common: &common
+  network_mode: host
+  ipc: host
+  environment: &common-env
+    ROS_DOMAIN_ID: "42"
+    RMW_IMPLEMENTATION: rmw_cyclonedds_cpp
+    DISPLAY: ${DISPLAY}
+    QT_X11_NO_MITSHM: "1"
+  volumes:
+    - /tmp/.X11-unix:/tmp/.X11-unix:rw
+
+services:
+
+  # ---------------------------------------------------------------
+  # Gazebo Harmonic + Spot (champ controller) + simulated D435i
+  # ---------------------------------------------------------------
+  sim:
+    <<: *common
+    build:
+      context: .
+      dockerfile: docker/sim.Dockerfile
+    container_name: spot_sim
+    # GPU passthrough for Gazebo's own rendering, not just cuVSLAM's compute.
+    # Without this, Gazebo falls back to software rasterization (~15+ CPU
+    # cores on this machine) with so little headroom left that running
+    # vslam+nav alongside it starves the physics/gait control loop of CPU
+    # time and the robot can visibly stumble and fall over mid-drive.
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    command: >
+      bash -lc "source /ws/install/setup.bash &&
+                ros2 launch spot_sim_slam sim.launch.py headless:=false"
+
+  # ---------------------------------------------------------------
+  # Isaac ROS Visual SLAM (cuVSLAM) — x86_64 + NVIDIA GPU
+  # ---------------------------------------------------------------
+  vslam:
+    <<: *common
+    build:
+      context: .
+      dockerfile: docker/vslam.Dockerfile
+    container_name: spot_vslam
+    profiles: ["gpu", ""]
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    command: >
+      bash -lc "source /opt/ros/humble/setup.bash &&
+                ros2 launch /launch/vslam_sim.launch.py"
+
+  # ---------------------------------------------------------------
+  # CPU fallback SLAM: RTAB-Map consuming the same topics, publishing
+  # the same map->odom TF. Lets you validate Nav2 + integration logic
+  # on laptops without an NVIDIA GPU. NOT the same algorithm as
+  # cuVSLAM — treat it as an interface-compatible stand-in.
+  # ---------------------------------------------------------------
+  slam_cpu:
+    <<: *common
+    build:
+      context: .
+      dockerfile: docker/sim.Dockerfile
+    container_name: spot_slam_cpu
+    profiles: ["cpu"]
+    command: >
+      bash -lc "source /ws/install/setup.bash &&
+                ros2 launch spot_sim_slam rtabmap_fallback.launch.py"
+
+  # ---------------------------------------------------------------
+  # Nav2 + cmd_vel safety gate (reuses spot_vslam_nav from the robot)
+  # ---------------------------------------------------------------
+  nav:
+    <<: *common
+    build:
+      context: .
+      dockerfile: docker/sim.Dockerfile
+    container_name: spot_nav
+    command: >
+      bash -lc "source /ws/install/setup.bash &&
+                ros2 launch spot_vslam_nav nav2.launch.py base_frame:=base_link odom_topic:=/odom spot_cmd_vel:=/cmd_vel scan_transform_tolerance:=0.5 params_file:=/ws/install/spot_sim_slam/share/spot_sim_slam/config/nav2_sim_overrides.yaml"
+
+  # ---------------------------------------------------------------
+  # RViz with the stack's config
+  # ---------------------------------------------------------------
+  rviz:
+    <<: *common
+    build:
+      context: .
+      dockerfile: docker/sim.Dockerfile
+    container_name: spot_rviz
+    command: >
+      bash -lc "source /ws/install/setup.bash &&
+                rviz2 -d /ws/src/spot_vslam_nav/rviz/spot_nav.rviz --ros-args -p use_sim_time:=true"

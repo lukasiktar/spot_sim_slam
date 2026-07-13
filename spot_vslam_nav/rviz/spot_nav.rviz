@@ -1,0 +1,77 @@
+Panels:
+  - Class: rviz_common/Displays
+    Name: Displays
+  - Class: rviz_common/Views
+    Name: Views
+  - Class: nav2_rviz_plugins/Navigation 2
+    Name: Navigation 2
+Visualization Manager:
+  Global Options:
+    Fixed Frame: map
+    Frame Rate: 30
+  Displays:
+    - Class: rviz_default_plugins/Grid
+      Name: Grid
+      Enabled: true
+    - Class: rviz_default_plugins/TF
+      Name: TF
+      Enabled: true
+      Show Names: false
+    - Class: rviz_default_plugins/Odometry
+      Name: VSLAM Odometry
+      Topic:
+        Value: /visual_slam/tracking/odometry
+      Enabled: true
+      Keep: 200
+    - Class: rviz_default_plugins/PointCloud2
+      Name: VSLAM Landmarks
+      Topic:
+        Value: /visual_slam/vis/landmarks_cloud
+      Enabled: true
+      Size (m): 0.03
+    - Class: rviz_default_plugins/LaserScan
+      Name: Depth Scan
+      Topic:
+        Value: /scan
+      Enabled: true
+    - Class: rviz_default_plugins/Map
+      Name: Global Costmap
+      Topic:
+        Value: /global_costmap/costmap
+      Color Scheme: costmap
+      Enabled: true
+    - Class: rviz_default_plugins/Map
+      Name: Local Costmap
+      Topic:
+        Value: /local_costmap/costmap
+      Color Scheme: costmap
+      Enabled: true
+    - Class: rviz_default_plugins/Path
+      Name: Global Plan
+      Topic:
+        Value: /plan
+      Enabled: true
+    - Class: rviz_default_plugins/Path
+      Name: Local Plan
+      Topic:
+        Value: /local_plan
+      Enabled: true
+  Tools:
+    - Class: rviz_default_plugins/MoveCamera
+    - Class: nav2_rviz_plugins/GoalTool
+  Views:
+    Current:
+      Class: rviz_default_plugins/Orbit
+      Distance: 15
+      Pitch: 0.8
+      Yaw: 0.0
+      # Follow the robot rather than orbiting the Fixed Frame's (map) origin.
+      # cuVSLAM's map/odom convention starts near (0,0,0) regardless of
+      # where the robot actually spawns in the world -- in this sim, Spot
+      # spawns ~80m from that origin, so without a Target Frame the default
+      # view shows empty space near (0,0,0) with the robot completely
+      # outside the initial viewport, looking like everything is "offset".
+      Target Frame: base_link
+Window Geometry:
+  Height: 900
+  Width: 1400
