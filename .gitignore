@@ -1,2 +1,7 @@
 maps/*
 !maps/.gitkeep
+
+.cache/
+
+HANDOFF.md
+

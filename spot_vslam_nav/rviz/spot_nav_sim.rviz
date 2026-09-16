@@ -7,7 +7,21 @@ Panels:
     Name: Navigation 2
 Visualization Manager:
   Global Options:
-    Fixed Frame: map
+    # Sim-only variant of spot_nav.rviz: Fixed Frame is "odom", not "map".
+    #
+    # In this sim, nvblox/Nav2 plan in "odom" because it's Gazebo's own
+    # ground-truth pose (see odom_rerooter.py) -- stable, unlike this
+    # tunnel's repeating tiles, which alias cuVSLAM's stereo tracking badly
+    # enough that its map->odom correction jumps around, including in z.
+    # Rendering through "map" (as spot_nav.rviz does, correctly, for the
+    # real robot) makes the ENTIRE scene -- robot model, costmaps, all of
+    # it -- visibly bob with every one of those jumps, even though the
+    # underlying odom-frame data driving navigation is fine. "odom" here
+    # is the stable ground truth, so anchoring the view to it removes that
+    # rendering artifact. Do not apply this same swap on the real robot:
+    # there it's real kinematic odom that drifts and "map" that's correct
+    # -- spot_nav.rviz's "map" Fixed Frame is the right choice there.
+    Fixed Frame: odom
     Frame Rate: 30
   Displays:
     - Class: rviz_default_plugins/Grid
@@ -42,14 +56,14 @@ Visualization Manager:
       Name: VSLAM Odometry
       Topic:
         Value: /visual_slam/tracking/odometry
-      Enabled: true
-      # Each kept arrow is drawn once using the TF live at receipt time and
-      # never re-transformed -- after cuVSLAM corrects drift (a loop closure
-      # jumps map->odom), old arrows stay frozen at their pre-correction
-      # position while the live RobotModel/map snap to the new one. 200 kept
-      # a very long, very stale-looking trail after any correction; a short
-      # one still shows recent heading/motion without accumulating an
-      # obviously "wrong" tail.
+      Enabled: false
+      # Off by default here: this is cuVSLAM's own tracked pose, which is
+      # exactly the estimate that's aliasing on the tunnel's repeating
+      # tiles. With the view anchored to "odom" (ground truth) instead of
+      # "map", this trail will visibly diverge from the robot model over
+      # time -- that's cuVSLAM's real tracking error made visible, not a
+      # rendering bug. Enable it if you specifically want to see how badly
+      # cuVSLAM is drifting; leave off for a clean view of the robot itself.
       Keep: 20
     - Class: rviz_default_plugins/PointCloud2
       Name: VSLAM Landmarks
@@ -123,12 +137,7 @@ Visualization Manager:
       Distance: 15
       Pitch: 0.8
       Yaw: 0.0
-      # Follow the robot rather than orbiting the Fixed Frame's (map) origin.
-      # cuVSLAM's map/odom convention starts near (0,0,0) regardless of
-      # where the robot actually spawns in the world -- in this sim, Spot
-      # spawns ~80m from that origin, so without a Target Frame the default
-      # view shows empty space near (0,0,0) with the robot completely
-      # outside the initial viewport, looking like everything is "offset".
+      # Follow the robot rather than orbiting the Fixed Frame's origin.
       Target Frame: base_link
 Window Geometry:
   Height: 900

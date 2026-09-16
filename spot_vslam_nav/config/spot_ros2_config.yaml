@@ -1,5 +1,4 @@
 # Example spot_ros2 driver configuration.
-# Copy, fill in credentials, and pass via spot_config:=... at launch.
 # Full reference: spot_driver/config/spot_ros_example.yaml in the
 # rai-opensource/spot_ros2 repository.
 /**:

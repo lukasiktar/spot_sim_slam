@@ -3,16 +3,6 @@
 Depth image -> PointCloud2, replacing Gazebo's own depth_camera point-cloud
 output.
 
-This Gazebo version's depth_camera point-cloud generation has a bug: every
-point comes out with x >= 0 regardless of which image column it came from,
-even though the depth image itself and its camera_info are both correctly
-centered/symmetric (verified independently). ROS's own depth_image_proc
-package would be the obvious fix, but its point_cloud_xyz_node requires the
-depth image and camera_info to share an (approximately) exact timestamp,
-and here they come from independent Gazebo publish schedules with a
-consistent ~60-70ms gap -- they never sync. Since our camera's intrinsics
-are static, there's no need for message-level sync at all: cache the latest
-camera_info and apply it to every incoming depth frame directly.
 """
 
 import numpy as np

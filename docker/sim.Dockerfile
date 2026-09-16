@@ -1,14 +1,8 @@
-# =============================================================================
 # Simulation image: ROS 2 Humble + Gazebo Sim + Spot (champ) + simulated D435i
-# Matches the Jetson deployment distro (Humble) exactly.
-# =============================================================================
 FROM ros:humble-ros-base
 
 SHELL ["/bin/bash", "-lc"]
 ENV DEBIAN_FRONTEND=noninteractive
-# "compute,utility" (nvidia-container-toolkit's default) is enough for CUDA
-# but not for Gazebo's own OpenGL rendering — without "graphics,display" too,
-# it silently falls back to software rasterization even with a GPU attached.
 ENV NVIDIA_DRIVER_CAPABILITIES=all
 
 # ---- System + ROS deps ------------------------------------------------------
@@ -29,9 +23,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # ---- Gazebo Sim (new Gazebo) + ros_gz for Humble ---------------------------
-# The champ Spot sim uses modern Gazebo Sim ("Ignition"). Humble's default
-# pairing is Fortress; that is what the spot_gazebo_ros2 repo builds against
-# and is the least-friction choice inside a Humble container.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ros-humble-ros-gz \
     && rm -rf /var/lib/apt/lists/*
@@ -41,27 +32,17 @@ WORKDIR /ws/src
 RUN git clone --depth 1 https://github.com/g1y5x3/spot_gazebo_ros2.git spot_gazebo_ros2 || \
     git clone --depth 1 https://github.com/justyx404/spot_gazebo_ros2.git spot_gazebo_ros2
 
-# spot_gazebo_ros2's OdometryPublisher plugin publishes a REP-105-violating
-# odom frame name ("/odom_spot", with a stray leading slash) that won't match
-# any consumer's "odom" frame. Normalize it at the source.
 RUN sed -i 's#<odom_frame>/odom_spot</odom_frame>#<odom_frame>odom</odom_frame>#' \
       /ws/src/spot_gazebo_ros2/spot_description/models/spot/model.sdf
 
-# model.urdf's mesh filenames are missing a "models/spot/" path segment
-# (package://spot_description/meshes/... instead of the real installed
-# location package://spot_description/models/spot/meshes/...) -- model.sdf
-# uses the correct path, so Gazebo has always rendered fine, but nothing
-# upstream actually consumes model.urdf, so this typo was never caught.
-# RViz's RobotModel display uses this file directly and needs it fixed.
+
 RUN sed -i 's#package://spot_description/meshes/#package://spot_description/models/spot/meshes/#g' \
       /ws/src/spot_gazebo_ros2/spot_description/models/spot/model.urdf
 
-# ---- Copy in our packages ---------------------------------------------------
-# spot_vslam_nav: the SAME package that deploys to the Jetson (nav2 configs,
-#                 cmd_vel gate, health monitor, goal CLI).
-# spot_sim_slam:  sim-only glue (D435i sensor overlay, bridge, launch files).
+
 COPY spot_vslam_nav /ws/src/spot_vslam_nav
 COPY sim /ws/src/spot_sim_slam
+COPY spot_search /ws/src/spot_search
 
 # ---- Inject the simulated D435i into Spot's URDF and model.sdf -------------
 RUN python3 /ws/src/spot_sim_slam/scripts/inject_camera.py \
@@ -74,7 +55,8 @@ WORKDIR /ws
 RUN source /opt/ros/humble/setup.bash && \
     apt-get update && rosdep update && \
     rosdep install --from-paths src --ignore-src -r -y --skip-keys \
-      "isaac_ros_visual_slam spot_driver spot_msgs realsense2_camera" && \
+      "isaac_ros_visual_slam spot_driver spot_msgs realsense2_camera \
+       nvblox_msgs vision_msgs" && \
     colcon build --symlink-install --packages-skip-regex ".*test.*" && \
     rm -rf /var/lib/apt/lists/*
 

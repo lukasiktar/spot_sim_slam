@@ -1,9 +1,13 @@
 # spot_sim_slam
 
 **Dockerized Gazebo simulation of Boston Dynamics Spot with a simulated
-RealSense D435i, Isaac ROS Visual SLAM, and Nav2** — for testing the full
-`spot_vslam_nav` autonomy stack on a laptop before deploying to the
-Jetson Orin Nano + real Spot.
+RealSense D435i, Isaac ROS Visual SLAM, Isaac ROS nvblox, and Nav2** — for
+testing the full `spot_vslam_nav` autonomy stack on a laptop before deploying
+to the Jetson Orin Nano + real Spot.
+
+On top of teleop and point-to-point navigation it runs an **autonomous search
+mission**: tell Spot how many people are hidden in the world and it explores
+on its own until it has found them, dropping a pin on the 2D map for each one.
 
 ```
 ┌─────────────────────────── your laptop (any distro, Jazzy host untouched) ───────────────────────────┐
@@ -12,13 +16,33 @@ Jetson Orin Nano + real Spot.
 │  │ Gazebo Sim world                 │   │ Isaac ROS Visual SLAM         │  │ Nav2 (MPPI, costmaps) │ │
 │  │ Spot model + champ gait ctrl     │   │ (cuVSLAM, NVIDIA GPU)         │  │ cmd_vel gate          │ │
 │  │ simulated D435i:                 │──►│ /camera/infra1..2 + /imu      │  │ goal_cli              │ │
-│  │  stereo IR + depth + IMU         │   │ publishes map->odom           │  │                       │ │
+│  │  stereo IR + depth + RGB + IMU   │   │ publishes map->odom           │  │                       │ │
 │  │ ros_gz bridge (RealSense topics) │   └───────────────────────────────┘  └───────────────────────┘ │
-│  │ champ publishes odom->base_link  │        --profile cpu swaps in RTAB-Map (no GPU needed)         │
+│  │ champ publishes odom->base_link  │   ┌──── nvblox (Humble+CUDA) ─────┐  ┌──── search (Humble) ──┐ │
+│  └──────────────────────────────────┘   │ Isaac ROS nvblox              │  │ frontier exploration  │ │
+│                                         │ TSDF + ESDF from depth        │  │ scan/explore mission  │ │
+│  ┌────── perception (Humble) ───────┐   │ 2D slice ──► /map             │  │ drives Nav2 actions   │ │
+│  │ YOLO person detector (CPU)       │   └───────────────────────────────┘  └───────────────────────┘ │
+│  │ depth reprojection ──► map frame │                                                                │
+│  │ person_map ──► pins + JSON       │        --profile cpu swaps in RTAB-Map (no GPU needed)         │
 │  └──────────────────────────────────┘                                                                │
 │                                  host network / DDS  +  /clock (sim time)                            │
 └──────────────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
+
+## The search mission in one paragraph
+
+nvblox integrates the D435i depth stream into a TSDF on the GPU and derives a
+Euclidean signed distance field from it. A horizontal slice of that ESDF
+becomes `/map`, an ordinary `nav_msgs/OccupancyGrid`, which does three jobs at
+once: it is Nav2's static layer, it is where the explorer finds *frontiers*
+(free cells touching unknown cells), and it is the canvas the person pins are
+drawn on. The mission controller alternates two Nav2 behaviours — spin in
+place to sweep the camera's 69° field of view across the full circle, then
+navigate to the best-scoring frontier — while YOLO watches the RGB stream.
+Each detection is reprojected through the depth image into the map frame, and
+a track that has been seen four times is promoted to a confirmed pin. When the
+pin count reaches the number you asked for, the mission stops.
 
 ## Why Docker, and why Humble inside the containers?
 
@@ -51,8 +75,9 @@ Jetson Thor, not Orin Nano). Testing natively on Jazzy would mean testing a
 
 | Service | Needs |
 |---|---|
-| `sim`, `nav`, `rviz` | Docker, X11 (`xhost +local:docker`) |
-| `vslam` | NVIDIA GPU + driver + [nvidia-container-toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html) |
+| `sim`, `nav`, `rviz`, `search` | Docker, X11 (`xhost +local:docker`) |
+| `vslam`, `nvblox` | NVIDIA GPU + driver + [nvidia-container-toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html) |
+| `perception` | nothing special — CPU-only PyTorch |
 | `slam_cpu` (fallback) | nothing special — pure CPU |
 
 No NVIDIA GPU in the laptop? Use `--profile cpu`: RTAB-Map consumes the same
@@ -70,23 +95,58 @@ record a cuVSLAM map and reuse it in a later session.
 xhost +local:docker
 docker compose build            # first build ~30–45 min (clones + compiles sim)
 
-# GPU laptop (full-fidelity):
-docker compose --profile gpu up -d
-
-# CPU-only laptop:
-docker compose --profile cpu up sim slam_cpu nav rviz
+docker compose up -d sim vslam nvblox nav search perception rviz
 ```
 
-Then drive it:
+Gazebo and RViz open as windows on your screen. Gazebo boots slowly on a
+software-rendered GPU fallback — wait for the world to unpause before
+sending commands:
+
+```bash
+docker logs -f spot_sim | grep "data: true"
+```
+
+### Autonomous search
+
+```bash
+# explore only, no person target (just builds the map)
+docker exec spot_search bash -lc \
+  "source /ws/install/setup.bash && ros2 run spot_search search_cli 0"
+
+# search for N people (stops once found, otherwise explores until exhausted)
+docker exec spot_search bash -lc \
+  "source /ws/install/setup.bash && ros2 run spot_search search_cli 2"
+```
+
+Add `--no-follow` to either command to send the request and return
+immediately instead of streaming status in your terminal.
+
+```bash
+# stop a running mission
+docker exec spot_search bash -lc \
+  "source /ws/install/setup.bash && ros2 service call /search/stop std_srvs/srv/Trigger"
+
+# check mission status
+docker exec spot_search bash -lc \
+  "source /ws/install/setup.bash && ros2 topic echo /search/status"
+```
+
+### Manual driving (optional)
 
 ```bash
 # teleop sanity check
 docker exec -it spot_sim bash -lc \
   "source /ws/install/setup.bash && ros2 run teleop_twist_keyboard teleop_twist_keyboard"
 
-# autonomous goal (same CLI as on the robot)
+# single point-to-point goal (same CLI as on the robot)
 docker exec -it spot_nav bash -lc \
   "source /ws/install/setup.bash && ros2 run spot_vslam_nav goal_cli -- 3.0 1.0 0"
+```
+
+### Shutting down
+
+```bash
+docker compose down
 ```
 
 ### What to verify (your pre-Jetson checklist)
@@ -134,9 +194,27 @@ parameterized in `spot_vslam_nav`'s launch files.
 * Gazebo's own depth camera point-cloud output is bugged in this version (every
   point comes out with x >= 0 regardless of source pixel); `sim.launch.py` runs
   a small `depth_to_points` node instead, generating `/camera/depth/color/points`
-  from the depth image + camera_info directly. Nav2's costmaps consume that
-  point cloud straight (`depth_cloud` observation source) rather than going
+  from the depth image + camera_info directly. Nav2's *local* costmap consumes
+  that point cloud straight (`depth_cloud` observation source) rather than going
   through `pointcloud_to_laserscan` — its `/scan` never reliably delivered data.
+  The *global* costmap now takes nvblox's `/map` as a static layer instead.
+* **nvblox's ESDF slice heights are in the global frame, not relative to the
+  floor.** The `map`/`odom` origin sits at Spot's spawn pose, roughly 0.7 m up,
+  so the slice defaults in `nvblox_sim.launch.py` are negative numbers. If
+  `/map` comes out empty or solid, this is the first thing to check — confirm
+  the floor's height with `ros2 run tf2_ros tf2_echo map base_link` and move
+  `slice_min_height`/`slice_max_height` to bracket knee-to-chest height above it.
+* **nvblox reconstructs in `map`, which cuVSLAM corrects on loop closure, and
+  nvblox cannot deform an already-integrated map.** So a loop closure leaves a
+  visible seam. The alternative — reconstructing in `odom` — has no seams but
+  inherits champ's kinematic drift, which over a ~100 m tunnel is far worse
+  than a seam. Switch with `global_frame:=odom` if your run is short.
+* **Person detection is the least realistic part of the stack.** The sim's
+  victims are "Rescue Randy" rescue-training mannequins rendered at 640×480,
+  which YOLO scores lower than it would a real person — hence the 0.35
+  confidence floor, well below a sane hardware default. `person_map`'s
+  `min_hits` is what actually rejects false positives; tighten `confidence`
+  and relax `min_hits` when moving to the real robot.
 
 ## Layout
 
@@ -145,12 +223,38 @@ spot_sim_slam/
 ├── docker-compose.yml
 ├── docker/
 │   ├── sim.Dockerfile        # Humble + Gazebo + champ Spot + our packages
-│   └── vslam.Dockerfile      # CUDA + Humble + isaac_ros_visual_slam (apt)
+│   ├── vslam.Dockerfile      # CUDA + Humble + isaac_ros_visual_slam + nvblox
+│   └── perception.Dockerfile # Humble + YOLO (CPU torch), weights baked in
 ├── sim/                      # ROS package: spot_sim_slam
-│   ├── urdf/d435i_sim.urdf.xacro     # simulated D435i (stereo IR+depth+IMU)
+│   ├── urdf/d435i_sim.urdf.xacro     # simulated D435i (stereo IR+depth+RGB+IMU)
 │   ├── scripts/inject_camera.py      # welds the camera onto Spot's URDF
 │   ├── config/gz_bridge.yaml         # gz<->ROS topics (RealSense-compatible)
 │   ├── config/nav2_sim_overrides.yaml
 │   └── launch/{sim,vslam_sim,rtabmap_fallback}.launch.py
+├── spot_search/              # autonomous person search (also deploys to Jetson)
+│   ├── map_slice_to_occupancy.py  # nvblox ESDF slice -> /map OccupancyGrid
+│   ├── person_detector.py         # YOLO + depth reprojection -> map-frame 3D
+│   ├── person_map.py              # dedupe/confirm -> pins, markers, JSON
+│   ├── frontier.py                # frontier extraction (pure numpy)
+│   ├── search_mission.py          # scan/explore state machine over Nav2
+│   ├── search_cli.py              # "find N people" + live status
+│   ├── save_search_map.py         # render map+pins to PNG
+│   └── launch/{nvblox_sim,perception,search}.launch.py
 └── spot_vslam_nav/           # the UNCHANGED robot package (also deploys to Jetson)
 ```
+
+## Which container runs what
+
+| Service | Image | Role |
+|---|---|---|
+| `sim` | sim | Gazebo, Spot, D435i, gz↔ROS bridge |
+| `vslam` | vslam | cuVSLAM → `map→odom` |
+| `nvblox` | vslam | nvblox reconstruction + `/map` |
+| `nav` | sim | Nav2 + cmd_vel safety gate |
+| `perception` | perception | YOLO detector + person pins |
+| `search` | sim | mission controller + frontier explorer |
+| `rviz` | sim | visualization |
+
+`spot_search` is installed into three of these images and each runs only the
+nodes whose dependencies it has — `nvblox_msgs` exists only in the vslam
+image, `ultralytics`/`cv_bridge` only in the perception image.

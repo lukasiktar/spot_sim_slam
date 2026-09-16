@@ -6,7 +6,8 @@ controller, robot_state_publisher, spawn) and adds the ros_gz bridge
 for the injected D435i topics.
 
 TF note (mirrors the real robot exactly):
-  - champ publishes odom -> base_link  (stands in for Spot's kinematic odom)
+  - odom_rerooter re-roots Gazebo's world-anchored odom -> base_link pose at
+    spawn and publishes it (stands in for Spot's kinematic odom)
   - cuVSLAM publishes map -> odom      (identical to hardware deployment)
 """
 
@@ -60,19 +61,10 @@ def generate_launch_description():
         output="screen",
     )
 
-    # The upstream bringup starts gz_sim.launch.py without "-r" in gz_args
-    # (hardcoded, not exposed as an overridable launch argument), so the
-    # world boots paused and nothing ever steps physics. Unpause it directly
-    # via the world control service once it comes up. "simple_tunnel" is the
-    # upstream launch file's default world_file.
+
     unpause_world = ExecuteProcess(
         cmd=[
             "bash", "-c",
-            # `ign service` exits 0 even when the call times out, so success
-            # has to be detected from its output rather than its exit code.
-            # With real camera sensors loading (software-rendered, no GPU
-            # passthrough on this container), world init can take ~2 minutes,
-            # so budget for that: 90 attempts * up to ~3s each.
             "for i in $(seq 1 90); do "
             "out=$(ign service -s /world/simple_tunnel/control "
             "--reqtype ignition.msgs.WorldControl --reptype ignition.msgs.Boolean "
@@ -84,24 +76,20 @@ def generate_launch_description():
         output="screen",
     )
 
-    # Gazebo's own depth_camera point-cloud generation has a bug in this
-    # version: every point comes out with x >= 0 regardless of which image
-    # column it came from, even though the depth image and its camera_info
-    # are both correctly centered/symmetric. Generate the point cloud
-    # ourselves from those (verified-good) inputs instead of trusting
-    # Gazebo's "/camera/depth/points" -> we never bridge that topic at all
-    # (see gz_bridge.yaml).
-    #
-    # depth_image_proc's point_cloud_xyz_node was tried first, but its
-    # image/camera_info synchronizer needs matching timestamps and our
-    # image and camera_info come from independent Gazebo publish schedules
-    # with a consistent ~60-70ms gap -- they never sync. Our own node just
-    # caches the (static) intrinsics and applies them to each depth frame
-    # directly, no message-level sync needed.
+
     depth_to_points = Node(
         package="spot_sim_slam",
         executable="depth_to_points",
         name="depth_to_points",
+        parameters=[{"use_sim_time": True}],
+        output="screen",
+    )
+
+
+    odom_rerooter = Node(
+        package="spot_sim_slam",
+        executable="odom_rerooter",
+        name="odom_rerooter",
         parameters=[{"use_sim_time": True}],
         output="screen",
     )
@@ -113,5 +101,6 @@ def generate_launch_description():
             bridge,
             unpause_world,
             depth_to_points,
+            odom_rerooter,
         ]
     )

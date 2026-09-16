@@ -10,8 +10,7 @@
     infra_height: 360        # 640x360@60 keeps the Orin Nano comfortable
     infra_fps: 60.0
 
-    # CRITICAL: the IR emitter projects a dot pattern that breaks feature
-    # tracking. Keep it OFF for the VSLAM stereo pair.
+
     depth_module.emitter_enabled: 0
 
     # ---- Depth for obstacle avoidance (Nav2 costmaps) ----
@@ -22,7 +21,6 @@
     pointcloud.enable: true
     align_depth.enable: false
 
-    # ---- Color off (saves USB bandwidth + CPU on the Orin Nano) ----
     enable_color: false
 
     # ---- IMU (D435i / D455) ----

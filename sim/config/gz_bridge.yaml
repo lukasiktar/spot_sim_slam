@@ -1,13 +1,4 @@
 # ros_gz_bridge topic map: Gazebo Sim <-> ROS 2
-# Loaded by sim.launch.py via `ros_gz_bridge parameter_bridge --ros-args -p config_file:=...`
-# Topic names deliberately match the real RealSense driver so the identical
-# VSLAM config runs against sim and hardware.
-#
-# NOTE: /clock is intentionally NOT bridged here — the upstream spot_bringup
-# bridge (spot_bridge.yaml) already bridges it. A second independent bridge
-# publishing the same /clock topic causes non-monotonic timestamp delivery
-# (two processes racing to publish), which tf2 sees as the clock repeatedly
-# "jumping back in time" and constantly clears its buffer as a result.
 
 - ros_topic_name: "/camera/infra1/image_rect_raw"
   gz_topic_name: "/camera/infra1/image_rect_raw"
@@ -51,14 +42,6 @@
   gz_type_name: "gz.msgs.CameraInfo"
   direction: GZ_TO_ROS
 
-# NOTE: /camera/depth/color/points is intentionally NOT bridged from Gazebo's
-# own "/camera/depth/points" here. Its camera_info is correctly centered
-# (verified: cx=320, cy=180 for a 640x360 image), but every point it
-# generates comes out with x >= 0 regardless of which image column it came
-# from — a bug in this Gazebo version's depth_camera point-cloud generation,
-# not a config issue. sim.launch.py instead runs our own depth_to_points
-# node on the (correctly oriented and symmetric) depth image + camera_info
-# bridged above, publishing the real point cloud there.
 
 - ros_topic_name: "/camera/color/image_raw"
   gz_topic_name: "/camera/color/image_raw"
@@ -72,10 +55,7 @@
   gz_type_name: "gz.msgs.CameraInfo"
   direction: GZ_TO_ROS
 
-# OdometryPublisher's odom->base_link pose (spot_description/model.sdf) is
-# only published as Pose_V on the model's default tf_topic — nothing else
-# bridges it into ROS's /tf, which Nav2's costmaps require.
-- ros_topic_name: "/tf"
+- ros_topic_name: "/gz/odom_raw"
   gz_topic_name: "/model/spot/pose"
   ros_type_name: "tf2_msgs/msg/TFMessage"
   gz_type_name: "gz.msgs.Pose_V"

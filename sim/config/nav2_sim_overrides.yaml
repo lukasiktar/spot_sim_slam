@@ -1,20 +1,16 @@
-# =============================================================================
+
 # Nav2 parameters for Boston Dynamics Spot + cuVSLAM localization
 # ROS 2 Humble (nav2 >= 1.1.9, includes MPPI controller)
 #
 # Localization: provided EXTERNALLY by Isaac ROS Visual SLAM (map->odom TF).
-#                No AMCL, no map_server: the global costmap is a rolling
-#                window built live from depth data. Spot navigates to poses
-#                in the (drift-corrected) map frame.
-# Base frame:    "body" (spot_ros2 default without tf_prefix). If you launch
-#                the driver with a spot_name, frames become "<name>/body" —
-#                the nav2.launch.py rewrites these automatically.
-# =============================================================================
+# Base frame:    "body" (spot_ros2 default without tf_prefix). 
+
+
 
 bt_navigator:
   ros__parameters:
     use_sim_time: true
-    global_frame: map
+    global_frame: odom
     robot_base_frame: body
     odom_topic: /odometry          # spot_ros2 kinematic odometry
     bt_loop_duration: 10
@@ -99,11 +95,14 @@ controller_server:
       batch_size: 1200          # lowered for Orin Nano (default 2000)
       vx_std: 0.2
       vy_std: 0.15
-      wz_std: 0.35
+      # Halved from 0.35/1.0: fast in-place rotation is the main thing that
+      # has toppled champ's simplified gait controller in this sim -- it has
+      # no real self-righting or turn-specific balance compensation.
+      wz_std: 0.2
       vx_max: 0.8
       vx_min: -0.3
       vy_max: 0.4
-      wz_max: 1.0
+      wz_max: 0.5
       iteration_count: 1
       prune_distance: 1.7
       transform_tolerance: 0.2
@@ -192,11 +191,6 @@ local_costmap:
       obstacle_layer:
         plugin: "nav2_costmap_2d::ObstacleLayer"
         enabled: true
-        # depth_scan (pointcloud_to_laserscan -> /scan) never delivers data:
-        # its internal tf2_ros::MessageFilter reports zero messages received
-        # despite the point cloud itself being confirmed healthy on the wire.
-        # Feed the costmap directly from the point cloud instead — nav2's own
-        # ObstacleLayer supports PointCloud2 observation sources natively.
         observation_sources: depth_cloud
         depth_cloud:
           topic: /camera/depth/color/points
@@ -221,17 +215,22 @@ global_costmap:
       use_sim_time: true
       update_frequency: 2.0
       publish_frequency: 1.0
-      global_frame: map
+      global_frame: odom
       robot_base_frame: body
-      # No static map: rolling window in the SLAM-corrected map frame.
-      rolling_window: true
-      width: 50
-      height: 50
+      # Not rolling any more: nvblox's reconstruction is the global map, and
+      # the explorer needs to plan to frontiers well outside any window that
+      # would fit around the robot. 
+      rolling_window: false
       resolution: 0.10
       footprint: "[[0.60, 0.28], [0.60, -0.28], [-0.60, -0.28], [-0.60, 0.28]]"
       footprint_padding: 0.03
       track_unknown_space: true
-      plugins: ["obstacle_layer", "inflation_layer"]
+      plugins: ["static_layer", "obstacle_layer", "inflation_layer"]
+      static_layer:
+        plugin: "nav2_costmap_2d::StaticLayer"
+        enabled: true
+        map_topic: /map
+        map_subscribe_transient_local: true
       obstacle_layer:
         plugin: "nav2_costmap_2d::ObstacleLayer"
         enabled: true
@@ -289,13 +288,13 @@ behavior_server:
     wait:
       plugin: "nav2_behaviors/Wait"
     local_frame: odom
-    global_frame: map
+    global_frame: odom
     robot_base_frame: body
     transform_tolerance: 0.2
     simulate_ahead_time: 2.0
-    max_rotational_vel: 0.8
-    min_rotational_vel: 0.2
-    rotational_acc_lim: 2.0
+    max_rotational_vel: 0.4
+    min_rotational_vel: 0.1
+    rotational_acc_lim: 0.8
 
 velocity_smoother:
   ros__parameters:
@@ -303,10 +302,10 @@ velocity_smoother:
     smoothing_frequency: 20.0
     scale_velocities: false
     feedback: "OPEN_LOOP"
-    max_velocity: [0.8, 0.4, 1.0]
-    min_velocity: [-0.3, -0.4, -1.0]
-    max_accel: [1.0, 0.8, 2.0]
-    max_decel: [-1.5, -1.2, -2.5]
+    max_velocity: [0.8, 0.4, 0.5]
+    min_velocity: [-0.3, -0.4, -0.5]
+    max_accel: [1.0, 0.8, 0.8]
+    max_decel: [-0.8, -0.6, -0.8]
     odom_topic: /odometry
     odom_duration: 0.1
     deadband_velocity: [0.0, 0.0, 0.0]

@@ -1,7 +1,7 @@
 """
 Nav2 bringup for Spot with external (cuVSLAM) localization.
 
-- No AMCL / map_server: map->odom comes from Isaac ROS Visual SLAM.
+- map->odom comes from Isaac ROS Visual SLAM.
 - Depth pointcloud is converted to a virtual LaserScan for the costmaps
   (much cheaper on the Orin Nano than raw PointCloud2 observation buffers).
 - Nav2's cmd_vel is routed:  controller -> velocity_smoother -> cmd_vel_gate
@@ -60,8 +60,7 @@ def generate_launch_description():
         ),
     ]
 
-    # Rewrite frame names in nav2_params.yaml so a tf_prefix'd Spot works
-    # without editing YAML by hand.
+
     configured_params = RewrittenYaml(
         source_file=params_file,
         root_key="",
@@ -175,6 +174,16 @@ def generate_launch_description():
             parameters=[
                 {"autostart": True, "node_names": lifecycle_nodes},
             ],
+        ),
+        # Publishes /vslam_ok from cuVSLAM's status/odometry staleness, which
+        # cmd_vel_gate above uses as its kill switch. Runs here rather than
+        # alongside cuVSLAM itself because this is where spot_vslam_nav (the
+        # package it ships in) is already built.
+        Node(
+            package="spot_vslam_nav",
+            executable="vslam_health_monitor",
+            name="vslam_health_monitor",
+            output="screen",
         ),
     ]
 

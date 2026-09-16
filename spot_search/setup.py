@@ -1,8 +1,9 @@
 import os
 from glob import glob
+
 from setuptools import setup
 
-package_name = "spot_sim_slam"
+package_name = "spot_search"
 
 setup(
     name=package_name,
@@ -13,19 +14,21 @@ setup(
         ("share/" + package_name, ["package.xml"]),
         (os.path.join("share", package_name, "launch"), glob("launch/*.launch.py")),
         (os.path.join("share", package_name, "config"), glob("config/*.yaml")),
-        (os.path.join("share", package_name, "urdf"), glob("urdf/*.xacro")),
-        (os.path.join("share", package_name, "scripts"), glob("scripts/*.py")),
     ],
     install_requires=["setuptools"],
     zip_safe=True,
     maintainer="Spot Autonomy",
     maintainer_email="user@example.com",
-    description="Sim glue for Spot VSLAM testing",
+    description="Autonomous person search for Spot (nvblox + frontier exploration)",
     license="MIT",
     entry_points={
         "console_scripts": [
-            "depth_to_points = spot_sim_slam.depth_to_points:main",
-            "odom_rerooter = spot_sim_slam.odom_rerooter:main",
+            "map_slice_to_occupancy = spot_search.map_slice_to_occupancy:main",
+            "person_detector = spot_search.person_detector:main",
+            "person_map = spot_search.person_map:main",
+            "search_mission = spot_search.search_mission:main",
+            "search_cli = spot_search.search_cli:main",
+            "save_search_map = spot_search.save_search_map:main",
         ],
     },
 )

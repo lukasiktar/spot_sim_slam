@@ -5,11 +5,7 @@
 #   - Docker + docker compose plugin
 #   - For the `vslam` service: NVIDIA GPU + driver + nvidia-container-toolkit
 #   - X11 for GUIs:  xhost +local:docker
-#
-# Everything runs ROS 2 HUMBLE inside containers to exactly match the
-# Jetson Orin Nano deployment (Isaac ROS 3.x / JetPack 6 = Humble).
-# Your host's ROS 2 Jazzy is untouched and not required.
-#
+##
 # Usage:
 #   xhost +local:docker
 #   docker compose build                  # ~30-45 min first time
@@ -21,7 +17,7 @@
 #   # everything at once:
 #   docker compose --profile gpu up
 #
-#   # no NVIDIA GPU? CPU fallback SLAM (RTAB-Map) with the same TF contract:
+#   # without NVIDIA GPU (uses RTAB-Map fallback SLAM instead of cuVSLAM):
 #   docker compose --profile cpu up
 # =============================================================================
 
@@ -47,11 +43,6 @@ services:
       context: .
       dockerfile: docker/sim.Dockerfile
     container_name: spot_sim
-    # GPU passthrough for Gazebo's own rendering, not just cuVSLAM's compute.
-    # Without this, Gazebo falls back to software rasterization (~15+ CPU
-    # cores on this machine) with so little headroom left that running
-    # vslam+nav alongside it starves the physics/gait control loop of CPU
-    # time and the robot can visibly stumble and fall over mid-drive.
     deploy:
       resources:
         reservations:
@@ -59,6 +50,9 @@ services:
             - driver: nvidia
               count: 1
               capabilities: [gpu]
+    volumes:
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+      - ./.cache/gazebo_fuel:/root/.ignition/fuel
     command: >
       bash -lc "source /ws/install/setup.bash &&
                 ros2 launch spot_sim_slam sim.launch.py headless:=false"
@@ -80,10 +74,6 @@ services:
             - driver: nvidia
               count: 1
               capabilities: [gpu]
-    # Host-persistent: cuVSLAM's save_map/load_map services write/read a map
-    # database by folder path inside the container, and the container
-    # filesystem is gone on `docker compose down` -- without this bind mount
-    # every saved map would vanish the moment the container is removed.
     volumes:
       - ./maps:/maps
     command: >
@@ -91,10 +81,63 @@ services:
                 ros2 launch /launch/vslam_sim.launch.py"
 
   # ---------------------------------------------------------------
-  # CPU fallback SLAM: RTAB-Map consuming the same topics, publishing
-  # the same map->odom TF. Lets you validate Nav2 + integration logic
-  # on laptops without an NVIDIA GPU. NOT the same algorithm as
-  # cuVSLAM — treat it as an interface-compatible stand-in.
+  # Isaac ROS nvblox — GPU 3D reconstruction (TSDF + ESDF).
+  # ---------------------------------------------------------------
+  nvblox:
+    <<: *common
+    build:
+      context: .
+      dockerfile: docker/vslam.Dockerfile
+    container_name: spot_nvblox
+    profiles: ["gpu", ""]
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    volumes:
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+      - ./maps:/maps
+    command: >
+      bash -lc "source /ws/install/setup.bash &&
+                ros2 launch spot_search nvblox_sim.launch.py"
+
+  # ---------------------------------------------------------------
+  # Person detection (YOLO) + map pins.
+  # ---------------------------------------------------------------
+  perception:
+    <<: *common
+    build:
+      context: .
+      dockerfile: docker/perception.Dockerfile
+    container_name: spot_perception
+    volumes:
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+      - ./maps:/maps
+    command: >
+      bash -lc "source /ws/install/setup.bash &&
+                ros2 launch spot_search perception.launch.py map_frame:=odom"
+
+  # ---------------------------------------------------------------
+  # Search mission controller: frontier exploration + scan behaviour.
+  # ---------------------------------------------------------------
+  search:
+    <<: *common
+    build:
+      context: .
+      dockerfile: docker/sim.Dockerfile
+    container_name: spot_search
+    volumes:
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+      - ./maps:/maps
+    command: >
+      bash -lc "source /ws/install/setup.bash &&
+                ros2 launch spot_search search.launch.py base_frame:=base_link map_frame:=odom"
+
+  # ---------------------------------------------------------------
+  # CPU fallback SLAM (RTAB-Map) with the same TF contract as cuVSLAM.
   # ---------------------------------------------------------------
   slam_cpu:
     <<: *common
@@ -131,4 +174,4 @@ services:
     container_name: spot_rviz
     command: >
       bash -lc "source /ws/install/setup.bash &&
-                rviz2 -d /ws/src/spot_vslam_nav/rviz/spot_nav.rviz --ros-args -p use_sim_time:=true"
+                rviz2 -d /ws/src/spot_vslam_nav/rviz/spot_nav_sim.rviz --ros-args -p use_sim_time:=true"

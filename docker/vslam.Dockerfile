@@ -1,18 +1,10 @@
-# =============================================================================
-# Isaac ROS Visual SLAM image — x86_64 laptop with NVIDIA GPU
+# Isaac ROS image — x86_64 laptop with NVIDIA GPU
 #
+# Hosts the two GPU pieces of the stack:
+#   vslam   — Isaac ROS Visual SLAM (cuVSLAM), publishes map->odom
+#   nvblox  — Isaac ROS nvblox, 3D reconstruction + the 2D ESDF slice
 # Base: CUDA runtime on Ubuntu 22.04, ROS 2 Humble, NVIDIA Isaac apt repo.
-#
-# Run with the NVIDIA container runtime (handled by docker-compose 'deploy'
-# section, or manually with:  docker run --gpus all ...)
-#
-# NOTE: If this packaged install fights your driver/CUDA combo, the bulletproof
-# alternative is NVIDIA's own container workflow:
-#   git clone https://github.com/NVIDIA-ISAAC-ROS/isaac_ros_common
-#   ./isaac_ros_common/scripts/run_dev.sh
-# and `apt install ros-humble-isaac-ros-visual-slam` inside it, then use the
-# same launch file mounted from ./sim/launch/vslam_sim.launch.py
-# =============================================================================
+
 FROM nvidia/cuda:12.2.2-runtime-ubuntu22.04
 
 SHELL ["/bin/bash", "-lc"]
@@ -40,10 +32,14 @@ RUN wget -qO - https://isaac.download.nvidia.com/isaac-ros/repos.key | apt-key a
     ros-humble-isaac-ros-visual-slam \
     && rm -rf /var/lib/apt/lists/*
 
+# ---- NVIDIA Isaac ROS nvblox ------------------------------------------------
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ros-humble-nvblox-ros \
+    ros-humble-nvblox-msgs \
+    ros-humble-nvblox-nav2 \
+    && rm -rf /var/lib/apt/lists/*
+
 # ---- NVIDIA VPI 3 (libnvvpi.so.3) -------------------------------------------
-# ros-humble-isaac-ros-visual-slam dlopens VPI at runtime rather than
-# declaring it as an apt dependency, so it has to be installed explicitly or
-# the node fails to load with "libnvvpi.so.3: cannot open shared object file".
 RUN apt-key adv --fetch-key https://repo.download.nvidia.com/jetson/jetson-ota-public.asc && \
     add-apt-repository -y 'deb https://repo.download.nvidia.com/jetson/x86_64/jammy r36.2 main' && \
     apt-get update && apt-get install -y --no-install-recommends \
@@ -54,6 +50,19 @@ RUN apt-key adv --fetch-key https://repo.download.nvidia.com/jetson/jetson-ota-p
 COPY sim/launch/vslam_sim.launch.py /launch/vslam_sim.launch.py
 COPY spot_vslam_nav/config/vslam.yaml /config/vslam.yaml
 
-RUN echo "source /opt/ros/humble/setup.bash" >> /root/.bashrc
+# ---- spot_search -------------------------------------------------------------
+# Only map_slice_to_occupancy runs here, but it has to live in this image: it
+# is the one node that needs nvblox_msgs, which exists nowhere else.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3-colcon-common-extensions python3-numpy \
+    ros-humble-nav-msgs ros-humble-visualization-msgs ros-humble-tf2-ros \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY spot_search /ws/src/spot_search
+WORKDIR /ws
+RUN source /opt/ros/humble/setup.bash && colcon build --symlink-install
+
+RUN echo "source /opt/ros/humble/setup.bash" >> /root/.bashrc && \
+    echo "source /ws/install/setup.bash" >> /root/.bashrc
 
 CMD ["bash"]

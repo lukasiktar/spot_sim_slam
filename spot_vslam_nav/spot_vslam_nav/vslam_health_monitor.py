@@ -7,9 +7,6 @@ Health signals:
       vo_state 1/2 = good tracking, anything else = degraded/lost.
   - Staleness: if no status arrives for `stale_timeout` s, report unhealthy.
 
-The message import is done defensively so this node still runs (staleness
-check only) if the interface package layout changes between Isaac ROS
-releases.
 """
 
 import rclpy

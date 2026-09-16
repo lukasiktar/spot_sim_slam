@@ -26,9 +26,8 @@ from launch_ros.actions import ComposableNodeContainer, Node
 from launch_ros.descriptions import ComposableNode
 
 # ---------------------------------------------------------------------------
-# EDIT ME: physical mount of the RealSense on Spot's body frame.
+# EDIT: physical mount of the RealSense on Spot's body frame.
 # x forward, y left, z up (meters); roll/pitch/yaw (radians).
-# Example below: camera ~30 cm forward of body origin, 12 cm up, level.
 # ---------------------------------------------------------------------------
 CAMERA_MOUNT_XYZ = ["0.30", "0.0", "0.12"]
 CAMERA_MOUNT_RPY = ["0.0", "0.0", "0.0"]
@@ -71,7 +70,7 @@ def generate_launch_description():
     map_frame = LaunchConfiguration("map_frame")
 
     # ------------------------------------------------------------------
-    # RealSense driver (composable, zero-copy into cuVSLAM via NITROS)
+    # RealSense driver 
     # ------------------------------------------------------------------
     realsense_node = ComposableNode(
         package="realsense2_camera",

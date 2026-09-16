@@ -2,20 +2,8 @@
   Simulated Intel RealSense D435i sensors, in native SDF form, injected
   directly into spot_gazebo_ros2's spot_description/models/spot/model.sdf.
 
-  This is the SDF-native counterpart to d435i_sim.urdf.xacro: the URDF/xacro
-  overlay only feeds robot_state_publisher's *TF-only* view (it does nothing
-  for Gazebo, which spawns the robot straight from model.sdf), so the actual
-  camera+IMU <sensor> elements have to live here to ever produce data.
+  This is the SDF-native counterpart to d435i_sim.urdf.xacro
 
-  Frame hierarchy mirrors d435i_sim.urdf.xacro exactly (fixed joints, all
-  poses given absolute/relative-to-model like the rest of model.sdf). Every
-  sensor sits on a level, non-rotated physical "_frame" link; the -90/-90
-  optical-convention rotation only ever applies to a separate, sensor-less
-  "_optical_frame" child used purely for TF/gz_frame_id labeling. Attaching
-  a sensor directly to an already-rotated "_optical_frame" link (as an
-  earlier version of this file did for depth) physically points it ~90
-  degrees away from the others: it isn't a wrong-topic bug, the sensor
-  really is aimed somewhere else.
     base_link
       -> camera_link                    (0.30 0 0.12, mount point)
            -> camera_infra1_frame       (physical; carries the infra1 sensor)
@@ -166,16 +154,7 @@
   <physics><ode><limit><cfm>0</cfm><erp>0.2</erp></limit></ode></physics>
 </joint>
 
-<!-- BUG FIX: the depth sensor used to be attached directly to
-     camera_depth_optical_frame, which already carries the -90/-90 optical
-     axis-convention rotation. That physically pointed the depth camera
-     ~90 degrees off from infra1/infra2 (which correctly sit on a level,
-     non-rotated physical frame): the sensor was never reading from a
-     different camera, it was just aimed somewhere else entirely, which is
-     also why obstacle mapping only ever filled in on one side (the point
-     cloud came from that misaimed sensor). Mirror infra1/infra2's pattern:
-     sensor on a level physical frame, rotation only on a separate,
-     sensor-less optical child used purely for TF/frame_id labeling. -->
+
 <link name="camera_depth_frame">
   <pose>0.30 0 0.12 0 0 0</pose>
   <inertial>
